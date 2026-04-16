@@ -1,0 +1,116 @@
+ch2 - an array of sequences
+
+
+overview of built-in seq
+
+* container seq hold refs to objects they contain, while flat sequences physically store the value of each item within its own memory space.
+
+* container sequences are backed by c arrays of PyObject*, pointers to python objects, while flat sequences are backed by c arrays of primitives.
+
+list comprehensions
+
+* list comprehensions are better than for loops from a style standpoint because they have a clear intent, for loops can do anything. Ideally, avoid side effects in list comps and keep them short.
+* list comps used to leak their variables before python 3, but they no longer do
+* list comps are just as fast and map/filter and generally more readable
+* list comps can do cartesian products just like nested for loops
+
+generator expressions
+
+* generator > listcomp for building tuples, arrays, etc because it yields items one by one using iterator protocol
+* use the same syntax as listcomps, but enclosed in parentheses rather than brackets
+* more on them in ch 14
+
+
+tuples are not just immutable lists
+* tuples can be used as records with no field names
+* when a tuple is a collection of fields, number of items is fixed and order is vital, as opposed to a list
+
+tuple unpacking
+* works with any iterable object, only requirement is iterable yields exactly one item per variable in receiving tuple, unless use a star to capture excess items
+* sometimes functions return multiple values that can be unpacked immediately. e.g. _, filename = os.path.split(...)
+* can be applied to exactly one variable, but it can appear in any position to capture the "rest" of the items
+* can also nested tuple unpack as long as the structure matches e.g. name, cc, pop, (lat, long) = 'new york', 'US', 20.104, (40.86, 74.02)
+* collections.namedtuple is basically a java record
+* tuple supports all list methods that do not involve adding or removing items, except for __reversed__. reversed(my_tuple) still works
+
+
+slicing
+* last item is always excluded in ranges and slices, which makes it easy to see the length when only a stop position is given, easy to compute the length when both start and stop are given, and easy to split a sequence in 2 parts at any index x.
+* s[a:b:c] represents start, stop, stride
+* s[a:b:c] produces a slice object
+* you can name slices
+* numpy uses multidimensional slices and ellipses in multidimensional arrays. ellipses can be used as shorthand for "give me everything in all other dimensions". for example, x[i, ...] is a shortcut for x[i, :, :, :]
+* mutable sequences can be modified using slice notation on the left e.g. `l[2:5] = [20, 30]` or `del l[5:7]`
+
+using + and * with sequences
+* both + and * always create a new object, and never change their operands
+
+building lists of lists
+* always use nested comprehension, don't use [['_'] * 3] * 3. it will create multiple references to the same inner list. it basically behaves like 
+```
+row = ['_'] * 3
+board = []
+for i in range(3):
+    board.append(row)
+```
+whereas list comprehension behaves like
+```
+board = []
+for i in range(3):
+    row = ['_'] * 3
+    board.append(row)
+```
+
+augmented assignment with sequences
+* the reason += (and *=) work is because of __iadd__ (and __imul__)
+* for example `a += b`. if a implements `__iadd__`, that will be called. if `__iadd__` is not implemented, then `a += b` behaves the same as `a = a + b`.
+* dont put mutable items in tuples
+* augmented assignment is not atomic, it involves multiple python bytecode operations
+* inspecting python bytecode is not too difficult
+
+list.sort and the sorted function
+* `list.sort` sorts in place and returns none to remind us it changes the target object
+* sorted creates a new list and returns it
+* kw args reverse and key. if reverse is `True`, items are returned in descending order.
+* key is a one argument lambda applied to each item to produce its sorting key. examples for strings are str.lower to perform a case-insensitive sort, and len to sort by charactor length
+
+managing ordered sequences with bisect
+* bisect module offers two main functions, `bisect` and `insort` that use the binary search algorithm to quickly find and insert items
+* `bisect(haystack, needle)` does a binary search for `needle` in `haystack` to locate the position where needle can be inserted.
+* can then use `haystack.insert(index, item)` to insert. but using `insort` does boths teps, and is faster.
+* `bisect` is actually an alias for `bisect_right`. there is also `bisect_left`. the only behavior difference is what happens when the elements compare equal. `bisect_right` returns an insertion point after the existing item, while `bisect_left` returns the position of the existing item, so insertion would occur before it. this doesn't matter much for types like ints, but could matter for objects that are distinct but compare equal.
+* insort similarly has `insort_left`
+
+arrays
+* most of this is irrelevant because people just use numpy
+* a python array is as lean as a c array.
+* provide a typecode to determine underlying C type.
+* array also provides fromfile and tofile for loading from files and saving to files, but can also just use pickle
+* there are many operations on arrays, append/byteswap/clear/copy/count/extend/frombytes/fromfile/fromlist/index/insert/itemsize/pop/remove/reverse/tobytes/tofile/tolist/typecode
+
+memory views
+* inspired by numpy
+* essentially a generalized numpy array structure in python itself, without the math
+* cast lets you change the way bytes in a memory view are read or written as units
+
+numpy and scipy
+* numpy implements multidimensional, homogeneous arrays and matrix types that hold numbers and user defined records, and provide efficient elementwise operations
+* scipy is a library written on top of numpy, offering scientific computing algorithms from linear alg, calculus, and stats
+* can create arrays of multiple dimensions, change shaps, transpose, etc etc all that good stuff that we already know
+* also supports high level operations for loading, saving, operating on all elements of an ndarray
+* foundation for pandas
+
+deques and other queues
+* append and pop make list usable as a stack or queue, but inserting/removing from the left of a list is costly
+* collections.deque is a thread safe double ended equeue designed for fast inserting and removing from both ends.
+* can set max length if need to keep a list of last seen items, when full will discard
+* can rotate
+* can `appendleft` and `extendleft`, in addition to `append` and `extend`
+* deque implements most list methods, and more like popleft and rotate.
+* cost is that removing items from the middle is not as fast
+* besides deque, other python std lib packages implement queues. 
+* there is queue which provides synchronized Queue, LifoQueue, PriorityQueue. These take maxsize arguments, but don't discard to make room and block instead, requiring another thread to remove.
+* there is also multiprocessing's bounded Queue, designed for IPC
+* asyncio provides Queue, LifoQueue, PriorityQueue, JoinableQueue with similar APIs, but adapted for managing tasks in async programming
+* heapq does not implement a queue class, but provides functions like heappush/heappop that let you use a mutable sequence like a pq
+

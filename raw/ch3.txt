@@ -1,0 +1,118 @@
+Dictionaries and Sets
+
+Generic Mapping Types
+* Mapping and MutableMapping ABCs formalize the interfaces of dict and similar types. They document and formize the minimal interfaces for mappings.
+* For all mapping types, keys must be hashable
+* Hashable means the object has a hash value which never changes during its lifetime and can be compared to other objects. Hashable objects which compare equal must have the same hash value
+* Immutable types are all hashable, frozenset is hashable, tuple is hashable if all items are
+* can use literal syntax or dict constructor with kwargs to build dicts
+
+dict comprehensions
+* a dictcomp builds a dict instance by producing a key:value pair from any iterable
+
+overview of common mapping methods
+* clear - remove items
+* __contains__ - contains check
+* copy - shallow copy - optimized for dicts specifically
+* __copy__ - support for copy.copy - use when you dont know the type of the object being copied
+* default_factory - this is the callable involved by the __missing__ method to set missing values in defaultdict. basically the logic is:
+```
+def __missing__(self, key):
+    if default_factory is None:
+        raise KeyError(key)
+    self.key = value = self.default_factory()
+    return value
+```
+note that missing is only called by the __getitem__ method if a key is missing and the class implements __missing__, and is not called by in/__contains__. this means that for default dicts, contains checks or `d.get` without first trying to access the item will return false. this is a deliberate design choice, `get` and `in` are supposed to be non-mutating methods.
+* fromkeys - new mapping from keys in iterable
+* get(k, [default]) - get item with key k, return default or None if missing
+* __getitem__ - invoked by d[k]
+An important point about __getitem__: If using d[k], the python interpreter will insert bytecode that causes `dict.__getitem__` to get called. So even if the user did `d.__getitem__ = lambda ...`, the lambda will not be called. What actually happens is that d[k] compiles to BINARY_SUBSCR bytecode, which the interpreter executes by calling PyObject_GetItem(d, k) in C, which then dispatches to the type's subscript slot. This is called implicit special method lookup. The same thing happens for other types (e.g. list)
+* items() - view over items
+* __iter__() - iterator over keys
+* keys() - view over keys
+* __len__() - number of items
+* __missing() - already covered
+* move_to_end() - moves to beginning or end, only supported by OrderedDict even though dict is ordered by default since pyton 3.7
+* pop(k, [default]) remove and return value at k or default
+* popitem() - remove and retun arbitrary item
+* __revered__() - iterator for keys last to first inserted
+* setdefault(k, [default]) - if k in d, return d[k] selse set d[k] = default and return
+* __setitem__(k, v)
+* update(m, [**kargs]) - update d with items from mapping or iterable of k, v pairs
+* values() - get view over values
+
+handling missing keys with setdefault
+* instead of doing
+```
+v = d.get(k, default)
+v.append/update/whatever(...)
+d[k] = v
+```
+do
+```
+d.setdefault(k, default).append/update/whatever(...)
+```
+this is simpler and avoids extra lookups
+
+mappings with flexible key lookup
+* sometimes convenient to have mappings return a made up value when missing key is searched
+* defaultdict is configured to create items on demand by having a __missing__ method implemented which is called by __getitem__
+* the constructor of defaultdict takes a type and uses that type's constructor as default_factory
+* can also customize the missing method to, for example, convert int arguments to getitem to strings if the lookup is equivalent i.e. the intent is for d[13] to be equal to d['13']. the missing method would be:
+```
+def __missing__(self, key):
+    if isinstance(key, str):
+        raise KeyError(key)
+    return self[str(key)]
+```
+
+Variations of dict
+* collections.OrderedDict - maintains keys in insertion order, allowing iteration over items in predictable order
+* ChainMap - holds list of mappings that can be searched as one. Lookup is performed on each mapping in order, succeeds if the key is found in any of them.
+* collections.Counter - holds an integer count for each key. Updating an existing key adds to its count. Implements various useful operators and methods like +, -, and most_common
+* collections.UserDict - pure python implementation of mapping that works like a standard dict, designed to be subclassed
+
+Subclassing UserDict
+* Easier than subclassing dict because built in implementation has shortcuts that we're forced to override, but UserDict we can inherit from with no problems
+
+Immutable Mappings
+* the types module provides a wrapper class called MappingProxyType which returns a mappingproxy isntance that is a read-only but dynamic view of the original mapping. Useful for exposing private mappings which the user should not change.
+
+Set Theory
+* collection of unique objects, frozenset is the hashable version
+* set types implement essential set operations union, intersection, and difference
+* empty set is set(), but otherwise use {1, 2, 3} as it will use run faster, as python doesn't have to fetch a constructor or build a list. To process the literal there is a special BUILD_SET bytecode
+* set comprehensions work like dict comps
+* sets have and, reverse and, intersection, &=, same for or, difference, and symmetric difference. They also have contains, subset, proper subset, superset, proper superset. Finally, they have add/clear/copy/discard(e)/__iter__/__len__/pop()/remove(e). discard fails silently while remove raises an error.
+
+Dict and Set under the hood
+* They are obviously faster than lists for lookups
+* sparse array
+* keeps 1/3 of the buckets empty
+* objects that are similar but not equal should have hash values the differ widely
+* python calls hash(key) to obtain a hash value and uses least significant bits as an offset to look up a bucket
+* If the bucket is empty, raises keyerror. if the keys match, it is found
+* if the keys dont match, hash collision. To resolve, the algorithm takes different bits in the hash, massages them, and uses the result as an offset to look up a different bucket. Collision resolution process is repeated until an empty bucket is found.
+* the strategy actually used is described in dictobject.c, and is basically to do j = ((5*j) + 1) mod 2**i for some initial j in the range, repeating 2**i times, which is guaranteed to generate each int in the range once. however, there is also a perturb constant which is used to shift the hash value and get all bits into play, the code is:
+```
+perturb >>= PERTURB_SHIFT;
+j = (5*j) + 1 + perturb;
+use j % 2**i as the next table index;
+```
+* the 5 * j + 1 pseudo scrambles, which is better when all the bits are in play.
+* there are a lot of considerations in the cpython codebase. I also found some comments about better cache affinity if selecting consecutive slots as candidates, but apparently this causes more collisions which ends up hurting performance.
+* If on insertion, python determines the hash table is too crowded, can resize.
+
+Practical Consequences of how dict works
+* keys must be hashable, meaning they support a stable hash, supports equality, and a == b => hash(a) == hash(b)
+* dicts have significant memory overhead since hash tables must be sparse to work
+* if handling a large quantity of records, tuples could be better than dicts for this reason
+* can use the __slots__ class attribute for user defined types to change storage of instance attrs from dict to tuple
+* key search is very fast - basically dicts trade space for time
+* key ordering depends on insertion order, because if 2 keys collide then which slot each occupies depends on which was inserted first
+* adding items to a dict may change order of existing keys. this is because of resizing. in python3.7+, insertion order is preserved, but cpython will still raise a runtime error on size changes during iteration. this is because resize during iteration could invalidate internal iterator state and its unclear whether the iterator should handle the new item(s).
+
+practical consequences on sets
+* same as dict
+
